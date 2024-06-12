@@ -1,7 +1,7 @@
-using NewPackage
+using DynLoco_TC
 using Test
 
-@testset "NewPackage.jl" begin
+@testset "DynLoco_TC.jl" begin
     # Write your tests here.
     wrw = WalkRW2l(P=0.15, vm = 0.38)
     @test typeof(wrw) == WalkRW2l # basic constructor for Walk

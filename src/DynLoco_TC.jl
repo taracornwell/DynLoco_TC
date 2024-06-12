@@ -1,4 +1,4 @@
-module NewPackage
+module DynLoco_TC
 
 # Locomotion models
 

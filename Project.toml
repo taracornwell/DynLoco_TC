@@ -1,0 +1,32 @@
+name = "NewPackage"
+uuid = "a59e6e67-20e1-413a-a57e-68e4e573fa3e"
+authors = ["Tara Cornwell <tara.cornwell@usc.edu> and contributors"]
+version = "1.0.0-DEV"
+
+[deps]
+Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+GR = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
+IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
+Ipopt = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+LsqFit = "2fda8390-95c7-5789-9bda-21331edee243"
+Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+PlotlyBase = "a03496cd-edff-5a9b-9e67-9cda94a718b5"
+PlotlyJS = "f0f68f2c-4968-5e81-91da-67840de0976a"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
+ToeplitzMatrices = "c751599d-da0a-543b-9d20-d0a503d91d24"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

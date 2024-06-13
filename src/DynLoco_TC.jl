@@ -856,9 +856,9 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         #upcomingheightchange = sum(δangles[i:mhorizon])
         #heightchangetonow = sum([0; δangles[1:i-1]])
         #upcomingδs = [δangles[i:myhorizon]; heightchangetonow-upcomingheightchange]
-        upcomingtime = (myhorizon)*tfstar
+        # upcomingtime = (myhorizon)*tfstar
         # do an optimization for current horizon
-        optmsr = optwalk(w, myhorizon; boundaryvels = (vm_current,vm0), boundarywork=false, totaltime=upcomingtime)
+        optmsr = optwalk(w, myhorizon, boundaryvels = (vm_current,vm0), boundarywork=false)
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].Pwork)...)
 

@@ -839,36 +839,38 @@ end
 # take a terrain and perform an mpc with each step
 # let's pretend you're going to take nhorizon steps that are going to
 # take you , I'm assuming you give us a nominal limit cycle
-#= function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
+function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
                  boundaryvels=(), extracost = 0) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
-    vm = vm0
+    vm_current = vm0
     tfstar = onestep(w).tf
     elapsedtime = 0
-    timeleft = totaltime - nsteps*tf
-    paddedδangles = [δangles; zeros(nsteps)]
+    timeleft = totaltime - nsteps*tfstar
+    #paddedδangles = [δangles; zeros(nsteps)]
     currentheight = 0
     for i in 1:nsteps
-        myhorizon = min(nhorizon, nsteps-i+1)
-        upcomingheightchange = sum(δangles[i:mhorizon])
-        heightchangetonow = sum([0; δangles[1:i-1]])
-        upcomingδs = [δangles[i:myhorizon]; heightchangetonow-upcomingheightchange]
-        upcomingtime = (myhorizon+1)*tf
-        # do an optimization 
-        optmsr = optwalk(w, myhorizon+1; boundaryvels = (vm,vm0), boundarywork=false, totaltime=5)
-        firststep = optmsr.steps[1]
-        #steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i])...)
+        # Determine your current horizon length based on how many steps have already been taken and nhorizon
+        myhorizon = min(nhorizon+1, nsteps-i+1)
+        #upcomingheightchange = sum(δangles[i:mhorizon])
+        #heightchangetonow = sum([0; δangles[1:i-1]])
+        #upcomingδs = [δangles[i:myhorizon]; heightchangetonow-upcomingheightchange]
+        upcomingtime = (myhorizon)*tfstar
+        # do an optimization for current horizon
+        optmsr = optwalk(w, myhorizon; boundaryvels = (vm_current,vm0), boundarywork=false, totaltime=upcomingtime)
+        # but only apply the first control to the actual system
+        steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].Pwork))
+
+        # update for next loop
         timeleft = timeleft - steps[i].tf
         elapsedtime = elapsedtime + firststep.tf
-        vm = steps[i].vm
+        vm_current = steps[i].vm
     end
-    totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
+    totalcost = sum(steps[i].Pwork for i in 1:nsteps) + extracost
     # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
-    finalvm = w.vm
     return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
     # boundaryvels is just passed forward to plots
-end =#
+end
 
 # I should also do something where we minimize the deviation in speed and
 # see how costly that is

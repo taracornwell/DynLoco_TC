@@ -860,11 +860,11 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         # do an optimization for current horizon
         optmsr = optwalk(w, myhorizon; boundaryvels = (vm_current,vm0), boundarywork=false, totaltime=upcomingtime)
         # but only apply the first control to the actual system
-        steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].Pwork))
+        steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].Pwork)...)
 
         # update for next loop
         timeleft = timeleft - steps[i].tf
-        elapsedtime = elapsedtime + firststep.tf
+        elapsedtime = elapsedtime + steps[i].tf
         vm_current = steps[i].vm
     end
     totalcost = sum(steps[i].Pwork for i in 1:nsteps) + extracost

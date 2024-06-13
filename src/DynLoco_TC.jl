@@ -836,9 +836,7 @@ end
 #         extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 # end
 
-# take a terrain and perform an mpc with each step
-# let's pretend you're going to take nhorizon steps that are going to
-# take you , I'm assuming you give us a nominal limit cycle
+# MPC: perform optimization across given horizon per step
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
@@ -848,17 +846,11 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
     tfstar = onestep(w).tf
     elapsedtime = 0
     timeleft = nsteps*tfstar
-    #paddedδangles = [δangles; zeros(nsteps)]
-    #currentheight = 0
     for i in 1:nsteps
         # Determine your current horizon length based on how many steps have already been taken and nhorizon
-        myhorizon = min(nhorizon+1, nsteps-i+1)
-        #upcomingheightchange = sum(δangles[i:mhorizon])
-        #heightchangetonow = sum([0; δangles[1:i-1]])
-        #upcomingδs = [δangles[i:myhorizon]; heightchangetonow-upcomingheightchange]
-        # upcomingtime = (myhorizon)*tfstar
+        myhorizon = min(nhorizon, nsteps-i+1)
         # do an optimization for current horizon
-        optmsr = optwalk(w, myhorizon, boundaryvels = (vm_current,vm0), boundarywork=false)
+        optmsr = optwalk(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false)
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P)...)
 
@@ -868,10 +860,8 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         vm_current = steps[i].vm
     end
     totalcost = sum(steps[i].Pwork for i in 1:nsteps) + extracost
-    # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
-    # boundaryvels is just passed forward to plots
 end
 
 # I should also do something where we minimize the deviation in speed and

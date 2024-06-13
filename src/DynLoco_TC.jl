@@ -7,7 +7,7 @@ using JuMP, Ipopt, Plots, Setfield
 using StructArrays
 using Dierckx # spline package
 
-export Walk, AbstractWalkRW2, WalkRW2l, Parms, onestep
+export Walk, AbstractWalkRW2, WalkRW2l, Parms, onestep, mpcstep
 export findgait
 
 abstract type Walk end
@@ -839,6 +839,8 @@ end
 # take a terrain and perform an mpc with each step
 # let's pretend you're going to take nhorizon steps that are going to
 # take you , I'm assuming you give us a nominal limit cycle
+using JuMP, Ipopt
+export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
                  boundaryvels=(), extracost = 0) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)

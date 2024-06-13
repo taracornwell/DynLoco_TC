@@ -7,7 +7,7 @@ using JuMP, Ipopt, Plots, Setfield
 using StructArrays
 using Dierckx # spline package
 
-export Walk, AbstractWalkRW2, WalkRW2l, Parms, onestep, mpcstep
+export Walk, AbstractWalkRW2, WalkRW2l, Parms, onestep
 export findgait
 
 abstract type Walk end
@@ -847,7 +847,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
     vm_current = vm0
     tfstar = onestep(w).tf
     elapsedtime = 0
-    timeleft = totaltime - nsteps*tfstar
+    timeleft = nsteps*tfstar
     #paddedδangles = [δangles; zeros(nsteps)]
     currentheight = 0
     for i in 1:nsteps

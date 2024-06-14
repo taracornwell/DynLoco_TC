@@ -104,7 +104,7 @@ end
 
 
 """
-    msr = MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
+    msr = MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
 
 Struct containing outputs of a multistep. Can also be fed into multistepplot.
 The steps field is a StepResults struct, which can be referred by index, e.g.
@@ -117,6 +117,7 @@ struct MultiStepResults
     vm0             # initial speed
     δangles         # angles, defined positive wrt nominal γ from preceding step
     boundaryvels::Tuple
+    perts
 end
 
 export MultiStepResults
@@ -136,7 +137,8 @@ function Base.cat(msrs::MultiStepResults...; dims=1)
     vm0 = msrs[1].vm0
     δangles = cat((msr.δangles for msr in msrs)..., dims=1)
     boundaryvels = (msrs[1].vm0,msrs[end].boundaryvels[2])
-    MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
+    perts = msrs.perts
+    MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
     #steps::StructArray{StepResults}
     #totalcost
     #totaltime
@@ -379,7 +381,7 @@ function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.
     # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
-    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
+    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
     # boundaryvels is just passed forward to plots
 end
 
@@ -844,7 +846,7 @@ end
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
-                 boundaryvels=(), extracost = 0) where W <: Walk
+                 boundaryvels=(), extracost = 0, perts = ones(nsteps)) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
     tfstar = onestep(w).tf
@@ -856,7 +858,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         # do an optimization for current horizon
         optmsr = optwalk(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false)
         # but only apply the first control to the actual system
-        steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P)...)
+        steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P, pert=perts[i])...)
 
         # update for next loop
         timeleft = timeleft - steps[i].tf
@@ -865,7 +867,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
     end
     totalcost = sum(steps[i].Pwork for i in 1:nsteps) + extracost
     totaltime = sum(getfield.(steps,:tf))
-    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels)
+    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
 end
 
 # I should also do something where we minimize the deviation in speed and

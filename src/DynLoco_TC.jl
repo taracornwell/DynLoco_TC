@@ -172,7 +172,7 @@ momentum to reach middle stance. A step will be returned with very long
 step time, and very slow mid-stance velocity.
 """
 function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
-    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety)
+    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety, pert=1.)
     mylog = safety ? logshave : log # logshave doesn't blow up on negative numbers
     # Start at mid-stance leg vertical, and find the time tf1
     # to heelstrike, and angular velocity Ωminus
@@ -215,6 +215,9 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
     else # no safety, not enough energy
         vmnew = √twicenextenergy # this should fail
     end
+
+    # multiply new midstance speed vm by perturbation size
+    vmnew = pert*vmnew
 
     # Step metrics
     steplength = 2L*sin(α) # rimless wheel step length
@@ -361,15 +364,15 @@ where slope angles `δangles` (default level ground), `vm0` initial mid-stance v
 can be used to apply model parameters such as `α`, `γ`, `M`, etc.
 """
 function multistep(w::W; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0,
-    boundaryvels=(), walkparms...) where W <: Walk
-    return multistep(W(w; walkparms...), Ps, δangles, boundaryvels=boundaryvels, extracost = extracost)
+    boundaryvels=(), perts=ones(length(Ps)), walkparms...) where W <: Walk
+    return multistep(W(w; walkparms...), Ps, δangles, boundaryvels=boundaryvels, extracost = extracost, perts=perts)
 end
 
 function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
-    boundaryvels=(), extracost = 0) where W <: Walk
+    boundaryvels=(), extracost = 0, perts=ones(length(Ps))) where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
-        steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i])...)
+        steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i]), pert=perts[i]...)
         w = W(w, vm=steps[i].vm)
     end
     totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
@@ -487,7 +490,7 @@ See also `optwalktime`.
 """
 function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    δs = zeros(numsteps), perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -534,7 +537,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         println(termination_status(optsteps))
     end
 
-    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels,
+    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts,
         extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
@@ -553,7 +556,7 @@ See also `optwalk`
 """
 function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork = true, symmetric=false,
-    totaltime=numsteps*onestep(w).tf) where W <: Walk # default to taking the time of regular steady walking
+    totaltime=numsteps*onestep(w).tf, perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, δ[1:numsteps], start=0.)         # delta slope
@@ -605,7 +608,7 @@ function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = not
         println(termination_status(optsteps))
     end
     return multistep(W(w,vm=value(v[1])), value.(P), value.(δ), vm0=value(v[1]),
-        boundaryvels = boundaryvels,
+        boundaryvels = boundaryvels, perts = perts,
         extracost = boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0)
 end
 
@@ -728,7 +731,8 @@ time expected of the nominal `w` on level ground. `startv` initial guess at spee
 See also `optwalk`.
 """
 function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., walkparms...) where W <: Walk
+    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., 
+        perts = ones(nsteps), walkparms...) where W <: Walk
     #println("walkparms = ", walkparms)
     w = W(w; walkparms...)
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
@@ -767,7 +771,7 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
     end
 
     result = multistep(W(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
-        boundaryvels=boundaryvels, extracost = ctime*value(totaltime) +
+        boundaryvels=boundaryvels, perts = perts, extracost = ctime*value(totaltime) +
         (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
     return result
 end
@@ -890,7 +894,7 @@ the same time expected of the nominal `w` on level ground.
 """
 function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    δs = zeros(numsteps), perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -938,7 +942,7 @@ function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         println(termination_status(optsteps))
     end
 
-    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels) #, optimal_solution
+    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts) #, optimal_solution
 end
 
 """

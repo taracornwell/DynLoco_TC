@@ -209,6 +209,8 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
         end
 
     end
+    # divide time for second phase by perturbation size (since it correlates to speed change)
+    tf2 = tf2/pert
     twicenextenergy = (2g*L*cos(θnew-γ)+L^2*Ωplus^2-2g*L*cos(-γ)) # to find next vm
     if twicenextenergy >= 0.
         vmnew = √twicenextenergy
@@ -515,14 +517,14 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
 
     # Constraints
     # produce separate functions for speeds and step times
-    register(optsteps, :onestepv, 3, # velocity after a step
-        (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).vm, autodiff=true) # output vm
-    register(optsteps, :onestept, 3, # time after a step
-        (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
+    register(optsteps, :onestepv, 4, # velocity after a step
+        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).vm, autodiff=true) # output vm
+    register(optsteps, :onestept, 4, # time after a step
+        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).tf, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δs[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 

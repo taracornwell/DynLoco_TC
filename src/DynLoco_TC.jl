@@ -372,7 +372,7 @@ function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.
     boundaryvels=(), extracost = 0, perts=ones(length(Ps))) where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
-        steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i]), pert=perts[i]...)
+        steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i], pert=perts[i])...)
         w = W(w, vm=steps[i].vm)
     end
     totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost

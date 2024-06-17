@@ -586,7 +586,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps)) + 
-            weight*1/2*sum((onestept(v[i],P[i],δs[i],pert[i])-nominaltime)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
+            weight*1/2*sum((onestept(v[i],P[i],δs[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
     end
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
@@ -903,7 +903,7 @@ end
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
-                 boundaryvels=(), extracost = 0, perts = ones(nsteps)) where W <: Walk
+                 boundaryvels=(), extracost = 0, perts = ones(nsteps), weight=0) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
     tfstar = onestep(w).tf
@@ -920,7 +920,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
             horiz_perts = perts[i:i+myhorizon]
         end
         # do an optimization for current horizon
-        optmsr = optwalk(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts)
+        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, weight=weight)
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P, pert=perts[i])...)
 

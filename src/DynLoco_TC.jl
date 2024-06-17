@@ -475,7 +475,7 @@ multistepplot
 end
 
 using JuMP, Ipopt
-export optwalk, optwalkslope
+export optwalk, optwalkslope, optwalk_TC
 
 """
     optwalk(w::Walk, numsteps=5)
@@ -532,6 +532,61 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps))) # minimum pos work
+    end
+    optimize!(optsteps)
+    if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
+        optimal_solution = (vms=value.(v), Ps=value.(P))
+    else
+        error("The model was not solved correctly.")
+        println(termination_status(optsteps))
+    end
+
+    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts,
+        extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
+end
+
+function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
+    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
+    δs = zeros(numsteps), perts = ones(numsteps), weight=0) where W <: Walk # default to taking the time of regular steady walking
+
+    optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
+    @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
+    @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
+
+    if boundaryvels === nothing || isempty(boundaryvels)
+        boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
+    end
+
+    if typeof(boundarywork) <: Bool
+        boundarywork = (boundarywork, boundarywork)
+    end
+
+    if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
+        @constraint(optsteps, v[1] == boundaryvels[1])
+    end
+    if !boundarywork[2]
+        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    end
+
+    # Constraints
+    # produce separate functions for speeds and step times
+    register(optsteps, :onestepv, 4, # velocity after a step
+        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).vm, autodiff=true) # output vm
+    register(optsteps, :onestept, 4, # time after a step
+        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).tf, autodiff=true)
+    @NLexpression(optsteps, summedtime, # add up time of all steps
+        sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
+    @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
+    for i = 1:numsteps  # step dynamics
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
+    end
+    @NLconstraint(optsteps, summedtime == totaltime) # total time
+
+    if boundarywork[1]
+        @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
+    else
+        @objective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps)) + 
+            weight*1/2*sum((onestept(v[i],P[i],δs[i],pert[i])-nominaltime)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
     end
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL

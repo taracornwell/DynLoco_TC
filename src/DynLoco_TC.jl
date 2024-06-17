@@ -858,7 +858,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         # Determine your current horizon length based on how many steps have already been taken and nhorizon
         myhorizon = min(nhorizon, nsteps-i+1)
         # figure out current perturbations within horizon
-        if i+myhorizon > length(nsteps)
+        if i+myhorizon > nsteps
             leftover = myhorizon+1 - length(perts[i:end])
             horiz_perts = [perts[i:end]; ones(leftover)]
         else

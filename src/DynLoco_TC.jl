@@ -858,7 +858,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         # Determine your current horizon length based on how many steps have already been taken and nhorizon
         myhorizon = min(nhorizon, nsteps-i+1)
         # do an optimization for current horizon
-        optmsr = optwalk(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false)
+        optmsr = optwalk(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=perts[i:i+myhorizon])
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P, pert=perts[i])...)
 

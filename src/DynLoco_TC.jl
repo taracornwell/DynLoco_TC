@@ -104,7 +104,7 @@ end
 
 
 """
-    msr = MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
+    msr = MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts)
 
 Struct containing outputs of a multistep. Can also be fed into multistepplot.
 The steps field is a StepResults struct, which can be referred by index, e.g.
@@ -112,12 +112,14 @@ The steps field is a StepResults struct, which can be referred by index, e.g.
 """
 struct MultiStepResults
     steps::StructArray{StepResults}
-    totalcost
+    workcost
+    tvarcost
     totaltime
     vm0             # initial speed
     δangles         # angles, defined positive wrt nominal γ from preceding step
     boundaryvels::Tuple
     perts
+    weight
 end
 
 export MultiStepResults
@@ -132,13 +134,15 @@ Only one-dimensional concatenation is supported.
 function Base.cat(msrs::MultiStepResults...; dims=1)
     @assert dims == 1 # 
     steps = cat((msr.steps for msr in msrs)..., dims=1)
-    totalcost = sum(msr.totalcost for msr in msrs)
+    workcost = sum(msr.workcost for msr in msrs)
+    tvarcost = sum(msr.tvarcost for msr in msrs)
     totaltime = sum(msr.totaltime for msr in msrs)
     vm0 = msrs[1].vm0
     δangles = cat((msr.δangles for msr in msrs)..., dims=1)
     boundaryvels = (msrs[1].vm0,msrs[end].boundaryvels[2])
     perts = msrs.perts
-    MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
+    weight = msrs.weight
+    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, weight)
     #steps::StructArray{StepResults}
     #totalcost
     #totaltime
@@ -373,17 +377,19 @@ function multistep(w::W; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm,
 end
 
 function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
-    boundaryvels=(), extracost = 0, perts=ones(length(Ps))) where W <: Walk
+    boundaryvels=(), extracost = 0, perts=ones(length(Ps)), weight = 0) where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
         steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i], pert=perts[i])...)
         w = W(w, vm=steps[i].vm)
     end
-    totalcost = sum(steps[i].Pwork for i in 1:length(Ps)) + extracost
+    tfstar = onestep(w).tf
+    workcost = sum(steps[i].Pwork for i in 1:length(Ps))
+    tvarcost = 1/2*sum((steps[i].tf-tfstar)^2 for i in 1:length(Ps))
     # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
-    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, weight)
     # boundaryvels is just passed forward to plots
 end
 
@@ -928,9 +934,10 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         elapsedtime = elapsedtime + steps[i].tf
         vm_current = steps[i].vm
     end
-    totalcost = sum(steps[i].Pwork for i in 1:nsteps) + extracost
+    workcost = sum(steps[i].Pwork for i in 1:nsteps)
+    tvarcost = 1/2*sum((steps[i].tf-tfstar)^2 for i in 1:nsteps)
     totaltime = sum(getfield.(steps,:tf))
-    return MultiStepResults(steps, totalcost, totaltime, vm0, δangles, boundaryvels, perts)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, weight)
 end
 
 # I should also do something where we minimize the deviation in speed and

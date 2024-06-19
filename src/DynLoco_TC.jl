@@ -583,6 +583,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     @NLexpression(optsteps, summedtime, # add up time of all steps
         sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
+    @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
     for i = 1:numsteps  # step dynamics
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
     end
@@ -591,7 +592,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     if boundarywork[1]
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
-        @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestept(v[i],P[i],δs[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
+        @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestepv(v[i],P[i],δs[i],perts[i])-nominalvel)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
     end
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL

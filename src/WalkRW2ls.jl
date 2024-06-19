@@ -97,8 +97,10 @@ end
     L = 1.  # leg length
     M = 1.  # body mass
     g = 1.  # gravitational acceleration
-    β = 0.42 # s = c*v^β
-    c = 1. # how step length increases with speed
+    # β = 0.42 # s = c*v^β
+    β = 0.54 # value updated from Collins and Kuo 2013
+    # c = 1. # how step length increases with speed
+    c = 1.22 # value updated from Collins and Kuo 2013
     vmstar = 0.
     parms = (:α, :γ, :L, :M, :g) # a list of the model parameters
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
@@ -114,9 +116,10 @@ function onestep(w::WalkRW2lvs; vm=w.vm, P=w.P, δangle = 0.,
     # δangle is the upward change in slope from nominal γ
     # Phase 1: From mid-stance to just before impact
     # θ is angle ccw from surface normal (which may be at slope)
-    # newsteplength = c*vm^β
+    newsteplength = c*vm^β # Grieve: SL = c*v^beta 
     # newα = newsteplength / (2L)
-    newα = (c*vm^β)/(2L)
+    # newα = (c*vm^β)/(2L)
+    newα = asin(newsteplength/(2L))
     θf = -newα + δangle # angle of stance leg just before impact, negative means cw
     # angle wrt vertical is -α-γ+δangle
     #Ωminus = -√(2*g*(cos(0)-cos(θf))+L*vm^2)/√L  # pre-impact speed

@@ -28,7 +28,7 @@ end
 # divide by two to get 0.35
 
 function onestep(w::WalkRW2ls; vm=w.vm, P=w.P, δangle = 0.,
-    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety, cstep=w.cstep, vmstar=w.vmstar)
+    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety, cstep=w.cstep, vmstar=w.vmstar, pert=1.)
     mylog = safety ? logshave : log # logshave doesn't blow up on negative numbers
     # Start at mid-stance leg vertical, and find the time tf1
     # to heelstrike, and angular velocity Ωminus
@@ -63,8 +63,9 @@ function onestep(w::WalkRW2ls; vm=w.vm, P=w.P, δangle = 0.,
         else # inroot negative,
             tf2 = 1e4 - inroot # more negative inroot extends time
         end
-
     end
+    # divide time for second phase by perturbation size (since it correlates to speed change)
+    tf2 = tf2/pert
     twicenextenergy = (2g*L*cos(θnew-γ)+L^2*Ωplus^2-2g*L*cos(-γ)) # to find next vm
     if twicenextenergy >= 0.
         vmnew = √twicenextenergy
@@ -73,6 +74,9 @@ function onestep(w::WalkRW2ls; vm=w.vm, P=w.P, δangle = 0.,
     else # no safety, not enough energy
         vmnew = √twicenextenergy # this should fail
     end
+
+    # multiply new midstance speed vm by perturbation size
+    vmnew = pert*vmnew
 
     # Step metrics
     steplength = 2L*sin(newα) # rimless wheel step length
@@ -103,7 +107,7 @@ end
 
 
 function onestep(w::WalkRW2lvs; vm=w.vm, P=w.P, δangle = 0.,
-    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety, c=w.c, vmstar=w.vmstar, β=w.β)
+    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety, c=w.c, vmstar=w.vmstar, β=w.β, pert=1.)
     mylog = safety ? logshave : log # logshave doesn't blow up on negative numbers
     # Start at mid-stance leg vertical, and find the time tf1
     # to heelstrike, and angular velocity Ωminus
@@ -139,8 +143,9 @@ function onestep(w::WalkRW2lvs; vm=w.vm, P=w.P, δangle = 0.,
         else # inroot negative,
             tf2 = 1e4 - inroot # more negative inroot extends time
         end
-
     end
+    # divide time for second phase by perturbation size (since it correlates to speed change)
+    tf2 = tf2/pert
     twicenextenergy = (2g*L*cos(θnew-γ)+L^2*Ωplus^2-2g*L*cos(-γ)) # to find next vm
     if twicenextenergy >= 0.
         vmnew = √twicenextenergy
@@ -150,6 +155,9 @@ function onestep(w::WalkRW2lvs; vm=w.vm, P=w.P, δangle = 0.,
         vmnew = √twicenextenergy # this should fail
     end
 
+    # multiply new midstance speed vm by perturbation size
+    vmnew = pert*vmnew
+    
     # Step metrics
     steplength = 2L*sin(newα) # rimless wheel step length
     tf = tf1 + tf2 # total time mid-stance to mid-stance

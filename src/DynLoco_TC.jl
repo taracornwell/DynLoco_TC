@@ -570,9 +570,9 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
         @constraint(optsteps, v[1] == boundaryvels[1])
     end
-    if !boundarywork[2]
-        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
-    end
+    #if !boundarywork[2]
+    #    @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    #end
 
     # Constraints
     # produce separate functions for speeds and step times

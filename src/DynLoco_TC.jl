@@ -556,7 +556,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     δs = zeros(numsteps), perts = ones(numsteps), weight=0.) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
-    @variable(optsteps, P[1:numsteps]>=0.5*w.P, start=w.P) # JuMP variables P
+    @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
     if boundaryvels === nothing || isempty(boundaryvels)
@@ -580,10 +580,13 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 4, # time after a step
         (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).tf, autodiff=true)
+    register(optsteps, :onestepu, 4, # push-off work
+        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).Pwork, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
         sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
     @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
+    @NLexpression(optsteps, nominalu, onestepu(w.vm,w.P,0,1)) # nominal speed
     for i = 1:numsteps  # step dynamics
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
     end
@@ -592,7 +595,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     if boundarywork[1]
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
-        @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestept(v[i],P[i],δs[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
+        @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestepu(v[i],P[i],δs[i],perts[i])-nominalu)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
     end
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL

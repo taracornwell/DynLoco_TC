@@ -119,7 +119,7 @@ struct MultiStepResults
     δangles         # angles, defined positive wrt nominal γ from preceding step
     boundaryvels::Tuple
     perts
-    weight
+    J
 end
 
 export MultiStepResults
@@ -141,8 +141,8 @@ function Base.cat(msrs::MultiStepResults...; dims=1)
     δangles = cat((msr.δangles for msr in msrs)..., dims=1)
     boundaryvels = (msrs[1].vm0,msrs[end].boundaryvels[2])
     perts = msrs.perts
-    weight = msrs.weight
-    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, weight)
+    J = msrs.J
+    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, J)
     #steps::StructArray{StepResults}
     #totalcost
     #totaltime
@@ -377,7 +377,7 @@ function multistep(w::W; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm,
 end
 
 function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
-    boundaryvels=(), extracost = 0, perts=ones(length(Ps)), weight = 0) where W <: Walk
+    boundaryvels=(), extracost = 0, perts=ones(length(Ps)), J="u") where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
         steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i], pert=perts[i])...)
@@ -389,7 +389,7 @@ function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.
     # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
-    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, weight)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, J)
     # boundaryvels is just passed forward to plots
 end
 
@@ -553,10 +553,10 @@ end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps), perts = ones(numsteps), weight=0.) where W <: Walk # default to taking the time of regular steady walking
+    δs = zeros(numsteps), perts = ones(numsteps), J="u") where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
-    @variable(optsteps, P[1:numsteps]>=0.5*w.P, start=w.P) # JuMP variables P
+    @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
     if boundaryvels === nothing || isempty(boundaryvels)
@@ -580,10 +580,13 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 4, # time after a step
         (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).tf, autodiff=true)
+    register(optsteps, :onestepu, 4, # time after a step
+        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).Pwork, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
         sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
     @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
+    @NLexpression(optsteps, nominalu, onestepu(w.vm,w.P,0,1)) # nominal work
     for i = 1:numsteps  # step dynamics
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
     end
@@ -592,7 +595,15 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     if boundarywork[1]
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
-        @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestept(v[i],P[i],δs[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # energy cost = push-off work and weighted "stability" cost = change in step time
+        if J == "dt"
+            @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],δs[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # cost = change in step time
+        elseif J == "u"
+            @NLobjective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps)))  # energy cost = push-off work
+        elseif J == "dv"
+            @NLobjective(optsteps, Min, 1/2*sum((onestepv(v[i],P[i],δs[i],perts[i])-nominalvel)^2 for i=1:numsteps))  # cost = change in velocity
+        elseif J == "du"
+            @NLobjective(optsteps, Min, 1/2*sum((onestepu(v[i],P[i],δs[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in velocity
+        end
     end
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
@@ -909,7 +920,7 @@ end
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
-                 boundaryvels=(), extracost = 0, perts = ones(nsteps), weight=0) where W <: Walk
+                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u") where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
     tfstar = onestep(w).tf
@@ -926,7 +937,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
             horiz_perts = perts[i:i+myhorizon]
         end
         # do an optimization for current horizon
-        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, weight=weight)
+        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, J=J)
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P, pert=perts[i])...)
 
@@ -938,7 +949,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
     workcost = sum(steps[i].Pwork for i in 1:nsteps)
     tvarcost = 1/2*sum((steps[i].tf-tfstar)^2 for i in 1:nsteps)
     totaltime = sum(getfield.(steps,:tf))
-    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, weight)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, J)
 end
 
 # I should also do something where we minimize the deviation in speed and

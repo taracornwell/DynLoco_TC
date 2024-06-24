@@ -553,10 +553,10 @@ end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps), perts = ones(numsteps), J="u") where W <: Walk # default to taking the time of regular steady walking
+    δs = zeros(numsteps), perts = ones(numsteps), J="u", min_P=0, max_P=2) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
-    @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
+    @variable(optsteps, min_P*w.P <= P[1:numsteps] <= max_P*w.P, start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
     if boundaryvels === nothing || isempty(boundaryvels)
@@ -920,7 +920,7 @@ end
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
-                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u") where W <: Walk
+                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u", min_P=0, max_P=2) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
     tfstar = onestep(w).tf
@@ -937,7 +937,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
             horiz_perts = perts[i:i+myhorizon]
         end
         # do an optimization for current horizon
-        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, J=J)
+        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, J=J, min_P=min_P, max_P=max_P)
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P, pert=perts[i])...)
 

@@ -560,7 +560,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     ub = max_P*w.P
         
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
-    @variable(optsteps, lb[i] <= P[1:numsteps] <= ub[i], start=w.P) # JuMP variables P
+    @variable(optsteps, lb[i] <= P[i=1:numsteps] <= ub[i], start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
     if boundaryvels === nothing || isempty(boundaryvels)

@@ -553,10 +553,14 @@ end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps), perts = ones(numsteps), J="u", min_P=0, max_P=2) where W <: Walk # default to taking the time of regular steady walking
+    δs = zeros(numsteps), perts = ones(numsteps), J="u", min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
+    # Set lower and upper bounds for P to simulate impairment
+    lb = min_P*w.P
+    ub = max_P*w.P
+        
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
-    @variable(optsteps, min_P*w.P <= P[1:numsteps] <= max_P*w.P, start=w.P) # JuMP variables P
+    @variable(optsteps, lb[i] <= P[1:numsteps] <= ub[i], start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
     if boundaryvels === nothing || isempty(boundaryvels)
@@ -920,7 +924,7 @@ end
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
-                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u", min_P=0, max_P=2) where W <: Walk
+                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u", min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
     tfstar = onestep(w).tf
@@ -933,11 +937,15 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
         if i+myhorizon > nsteps
             leftover = myhorizon+1 - length(perts[i:end])
             horiz_perts = [perts[i:end]; ones(leftover)]
+            new_min = [min_P[i:end]; zeros(leftover)] # Defaults but can edit this later
+            new_max = [max_P[i:end]; 2*ones(leftover)]
         else
             horiz_perts = perts[i:i+myhorizon]
+            new_min = min_P[i:i+myhorizon]
+            new_max = max_P[i:i+myhorizon]
         end
         # do an optimization for current horizon
-        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, J=J, min_P=min_P, max_P=max_P)
+        optmsr = optwalk_TC(w, myhorizon+1, boundaryvels = (vm_current,vm0), boundarywork=false, perts=horiz_perts, J=J, min_P=new_min, max_P=new_max)
         # but only apply the first control to the actual system
         steps[i] = StepResults(onestep(w, vm=vm_current, P=optmsr.steps[1].P, pert=perts[i])...)
 

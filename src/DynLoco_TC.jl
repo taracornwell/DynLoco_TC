@@ -924,7 +924,7 @@ end
 using JuMP, Ipopt
 export mpcstep
 function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
-                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u", min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk
+                 boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u", min_P=zeros(nsteps), max_P=2*ones(nsteps)) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
     tfstar = onestep(w).tf

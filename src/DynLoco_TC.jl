@@ -552,7 +552,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
 end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
-    boundarywork::Union{Tuple{Bool,Bool},Bool} = (false,false), totaltime=numsteps*onestep(w).tf,
+    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
     δs = zeros(numsteps), perts = ones(numsteps), J="u", weight=0, min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     # Set lower and upper bounds for P to simulate impairment
@@ -563,27 +563,20 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     @variable(optsteps, lb[i] <= P[i=1:numsteps] <= ub[i], start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
-    if typeof(boundarywork) <: Bool
-        boundarywork = (boundarywork, boundarywork)
-    end
-    
-    if !boundarywork[2] && !isempty(boundaryvels)
-        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
-    end
-    
     if boundaryvels === nothing || isempty(boundaryvels)
         boundaryvels[1] = w.vm # default to given gait if nothing specified
-        if boundarywork[2]
-            boundaryvels[2] = w.vm
-        else
-            boundaryvels[2] = NaN
-        end
+    end
+
+    if typeof(boundarywork) <: Bool
+        boundarywork = (boundarywork, boundarywork)
     end
 
     if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
         @constraint(optsteps, v[1] == boundaryvels[1])
     end
-    
+    if !boundarywork[2] && length(boundaryvels) > 1
+        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    end
 
     # Constraints
     # produce separate functions for speeds and step times

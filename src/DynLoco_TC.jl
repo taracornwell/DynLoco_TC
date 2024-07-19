@@ -567,8 +567,11 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         boundarywork = (boundarywork, boundarywork)
     end
 
-    if !boundarywork[2] & boundaryvels !== nothing
-        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    if !boundarywork[2]
+        if boundaryvels === nothing || isempty(boundaryvels)
+        else
+            @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+        end
     end
     
     if boundaryvels === nothing || isempty(boundaryvels)

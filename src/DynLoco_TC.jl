@@ -567,21 +567,21 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         boundarywork = (boundarywork, boundarywork)
     end
     
-    if !boundarywork[2] && !isempty(boundaryvels)
-        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    if !boundarywork[2] && !isempty(boundaryvels) # no boundary work, but there are input boundaryvels
+        @constraint(optsteps, v[numsteps+1] == boundaryvels[2]) # only apply this boundary constraint if user wants set start and end velocities
     end
     
-    if boundaryvels === nothing || isempty(boundaryvels)
+    if boundaryvels === nothing || isempty(boundaryvels) # no input boundaryvels
         boundaryvels[1] = w.vm # default to given gait if nothing specified
-        if boundarywork[2]
+        if boundarywork[2] # boundary work exists
             boundaryvels[2] = w.vm
         else
-            boundaryvels[2] = NaN
+            boundaryvels[2] = 0 # use as placeholder (try to edit later?)
         end
     end
 
     if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
-        @constraint(optsteps, v[1] == boundaryvels[1])
+        @constraint(optsteps, v[1] == boundaryvels[1]) # start velocity will usually always be set
     end
     
 

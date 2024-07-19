@@ -563,20 +563,21 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     @variable(optsteps, lb[i] <= P[i=1:numsteps] <= ub[i], start=w.P) # JuMP variables P
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
-    if boundaryvels === nothing || isempty(boundaryvels)
-        boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
-    end
-
     if typeof(boundarywork) <: Bool
         boundarywork = (boundarywork, boundarywork)
+    end
+
+    if !boundarywork[2] & boundaryvels ~== nothing
+        @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
+    end
+    
+    if boundaryvels === nothing || isempty(boundaryvels)
+        boundaryvels = (w.vm, w.vm) # default to given gait if nothing specified
     end
 
     if !boundarywork[1] # no hip work at beginning or end; apply boundary velocity constraints
         @constraint(optsteps, v[1] == boundaryvels[1])
     end
-    #if !boundarywork[2]
-    #    @constraint(optsteps, v[numsteps+1] == boundaryvels[2])
-    #end
 
     # Constraints
     # produce separate functions for speeds and step times

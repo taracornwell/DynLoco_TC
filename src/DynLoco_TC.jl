@@ -75,6 +75,7 @@ struct StepResults
     omegaplus
     vm0    # middle-stance velocity at start of step
     delta      # slope of landing step + wrt level 
+    perts
 end
 
 function Base.show(io::IO, w::W) where W <: Walk
@@ -104,7 +105,7 @@ end
 
 
 """
-    msr = MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts)
+    msr = MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels)
 
 Struct containing outputs of a multistep. Can also be fed into multistepplot.
 The steps field is a StepResults struct, which can be referred by index, e.g.
@@ -118,8 +119,6 @@ struct MultiStepResults
     vm0             # initial speed
     deltaangles         # angles, defined positive wrt nominal gamma from preceding step
     boundaryvels::Tuple
-    perts
-    J
 end
 
 export MultiStepResults
@@ -140,9 +139,7 @@ function Base.cat(msrs::MultiStepResults...; dims=1)
     vm0 = msrs[1].vm0
     deltaangles = cat((msr.deltaangles for msr in msrs)..., dims=1)
     boundaryvels = (msrs[1].vm0,msrs[end].boundaryvels[2])
-    perts = msrs.perts
-    J = msrs.J
-    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts, J)
+    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels)
     #steps::StructArray{StepResults}
     #totalcost
     #totaltime
@@ -234,7 +231,7 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, deltaangle = 0.,
     return (vm=vmnew, thetanew=thetanew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
         speed=speed, steplength=steplength, stepfrequency=speed/steplength,tf1=tf1, tf2=tf2,
         omegaminus=omegaminus,omegaplus=omegaplus,
-        vm0=vm,delta=deltaangle)
+        vm0=vm,delta=deltaangle,perts=pert)
 end
 export simulatestep
 
@@ -389,7 +386,7 @@ function multistep(w::W, Ps::AbstractArray, deltaangles=zeros(length(Ps)); vm0 =
     # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
-    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts, J)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels)
     # boundaryvels is just passed forward to plots
 end
 

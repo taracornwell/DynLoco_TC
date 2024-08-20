@@ -168,5 +168,5 @@ function onestep(w::WalkRW2lvs; vm=w.vm, P=w.P, deltaangle = 0.,
     return (vm=vmnew, thetanew=thetanew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
         speed=speed, steplength=steplength, stepfrequency=speed/steplength,tf1=tf1, tf2=tf2,
         omegaminus=omegaminus,omegaplus=omegaplus,
-        vm0=vm,delta=deltaangle)
+        vm0=vm,delta=deltaangle,pert=pert)
 end

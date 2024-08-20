@@ -374,7 +374,7 @@ function multistep(w::W; Ps=w.P*ones(5), deltaangles=zeros(length(Ps)), vm0 = w.
 end
 
 function multistep(w::W, Ps::AbstractArray, deltaangles=zeros(length(Ps)); vm0 = w.vm,
-    boundaryvels=(), extracost = 0, perts=ones(length(Ps)), J="u") where W <: Walk
+    boundaryvels=(), extracost = 0, perts=ones(length(Ps))) where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
         steps[i] = StepResults(onestep(w, P=Ps[i], deltaangle=deltaangles[i], pert=perts[i])...)

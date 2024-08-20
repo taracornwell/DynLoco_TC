@@ -16,10 +16,10 @@ abstract type AbstractWalkRW2 <: Walk end
 include("WalkRW2ls.jl") # varying step length model
 
 """
-    w = WalkRW2l(vm, P, α, γ, L, M, g, parms, limitcycle)
+    w = WalkRW2l(vm, P, alpha, gamma, L, M, g, parms, limitcycle)
 
 Rimless wheel in 2D, linearized. Struct containing model parameters. Parameter values can be
-overridden with `WalkRW2l(w, α=0.35)` which produces a new model like `w` except with a new
+overridden with `WalkRW2l(w, alpha=0.35)` which produces a new model like `w` except with a new
 value for `alpha`. Similarly any parameter may be replaced using named
 keyword arguments. State: mid-stance speed `vm`. Control: Push-off impulse `P`.
 
@@ -32,13 +32,13 @@ The default object is a limit cycle with speed of 0.4.
 """
 @with_kw struct WalkRW2l <: AbstractWalkRW2
     vm = 0.36311831317383164 # initial mid-stance velocity (stance leg upright)
-    P = 0.1836457852912501   # push-off impulse (mass-normalized, units of Δv)
-    α = 0.35 # angle between legs
-    γ = 0.  # downward slope
+    P = 0.1836457852912501   # push-off impulse (mass-normalized, units of deltav)
+    alpha = 0.35 # angle between legs
+    gamma = 0.  # downward slope
     L = 1.  # leg length
     M = 1.  # body mass
     g = 1.  # gravitational acceleration
-    parms = (:α, :γ, :L, :M, :g) # a list of the model parameters
+    parms = (:alpha, :gamma, :L, :M, :g) # a list of the model parameters
     limitcycle = (parms = (:vm,), f = w -> onestep(w).vm - w.vm)
     safety = false # safety keeps model from falling backward if not enough momentum
 end
@@ -46,13 +46,13 @@ end
 export StepResults, MultiStepResults
 
 """
-    steps = StepResults(vm, θnew, tf, P, C, Pwork, Cwork, speed, steplength,
-        tf1, tf2, Ωminus, Ωplus)
+    steps = StepResults(vm, thetanew, tf, P, C, Pwork, Cwork, speed, steplength,
+        tf1, tf2, omegaminus, omegaplus)
 
 Struct containing step outcomes, including `vm` = middle stance velocity following
-step-to-step transition, `θnew` = angle of new stance leg (+ccw about vertical),
+step-to-step transition, `thetanew` = angle of new stance leg (+ccw about vertical),
 `tf` = step time (mid-stance to mid-stance), `P`/`C` = push-off/collision,
-`Pwork`/`Cwork` = work, `tf1`/`tf2` = times until s2s transition, `Ωminus`/`Ωplus` =
+`Pwork`/`Cwork` = work, `tf1`/`tf2` = times until s2s transition, `omegaminus`/`omegaplus` =
 angular velocities of model before and after s2s.
 
 `StepResults` is a StructArray, and can be referred to by step index `steps[i]`,
@@ -60,7 +60,7 @@ or by field name `steps.tf` (an array of step times).
 """
 struct StepResults
     vm    # mid-stance velocity after s2s transition
-    θnew  # angle of new stance leg after s2s transition (+ccw from vertical)
+    thetanew  # angle of new stance leg after s2s transition (+ccw from vertical)
     tf    # step time (mid-stance to mid-stance)
     P
     C
@@ -71,10 +71,10 @@ struct StepResults
     stepfrequency
     tf1
     tf2
-    Ωminus
-    Ωplus
+    omegaminus
+    omegaplus
     vm0    # middle-stance velocity at start of step
-    δ      # slope of landing step + wrt level 
+    delta      # slope of landing step + wrt level 
 end
 
 function Base.show(io::IO, w::W) where W <: Walk
@@ -104,7 +104,7 @@ end
 
 
 """
-    msr = MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts)
+    msr = MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts)
 
 Struct containing outputs of a multistep. Can also be fed into multistepplot.
 The steps field is a StepResults struct, which can be referred by index, e.g.
@@ -116,7 +116,7 @@ struct MultiStepResults
     tvarcost
     totaltime
     vm0             # initial speed
-    δangles         # angles, defined positive wrt nominal γ from preceding step
+    deltaangles         # angles, defined positive wrt nominal gamma from preceding step
     boundaryvels::Tuple
     perts
     J
@@ -138,16 +138,16 @@ function Base.cat(msrs::MultiStepResults...; dims=1)
     tvarcost = sum(msr.tvarcost for msr in msrs)
     totaltime = sum(msr.totaltime for msr in msrs)
     vm0 = msrs[1].vm0
-    δangles = cat((msr.δangles for msr in msrs)..., dims=1)
+    deltaangles = cat((msr.deltaangles for msr in msrs)..., dims=1)
     boundaryvels = (msrs[1].vm0,msrs[end].boundaryvels[2])
     perts = msrs.perts
     J = msrs.J
-    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, J)
+    MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts, J)
     #steps::StructArray{StepResults}
     #totalcost
     #totaltime
     #vm0             # initial speed
-    #δangles         # angles, defined positive wrt nominal γ from preceding step
+    #deltaangles         # angles, defined positive wrt nominal gamma from preceding step
     #boundaryvels::Tuple
 end
 
@@ -170,44 +170,44 @@ getfields(w::Walk, fields) = map(f->getfield(w,f), fields)
 
 Take one step with a `walk` struct, from mid-stance to mid-stance. Parameter
 values can be supplied to override the existing field values. Notably,
-includes vm, P, δangle.
+includes vm, P, deltaangle.
 Output is a `NamedTuple` of outcomes such as `vm` (at end), `tf` (final time),
 `work`, `speed`, `steplength`, etc.
 Set `safety=true` to prevent step from blowing up if stance leg has too little
 momentum to reach middle stance. A step will be returned with very long
 step time, and very slow mid-stance velocity.
 """
-function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
-    α=w.α, γ=w.γ,g=w.g,L=w.L,safety=w.safety, pert=1.)
+function onestep(w::WalkRW2l; vm=w.vm, P=w.P, deltaangle = 0.,
+    alpha=w.alpha, gamma=w.gamma,g=w.g,L=w.L,safety=w.safety, pert=1.)
     mylog = safety ? logshave : log # logshave doesn't blow up on negative numbers
     # Start at mid-stance leg vertical, and find the time tf1
-    # to heelstrike, and angular velocity Ωminus
-    # δangle is the upward change in slope from nominal γ
+    # to heelstrike, and angular velocity omegaminus
+    # deltaangle is the upward change in slope from nominal gamma
     # Phase 1: From mid-stance to just before impact
-    # θ is angle ccw from surface normal (which may be at slope)
-    θf = -α + δangle # angle of stance leg just before impact, negative means cw
-    # angle wrt vertical is -α-γ+δangle
-    #Ωminus = -√(2*g*(cos(0)-cos(θf))+L*vm^2)/√L  # pre-impact speed
-    Ωminus = -√(2*g/L*(cos(-γ)-cos(θf-γ))+(vm/L)^2)  # pre-impact speed
-    tf1 = mylog((L*(γ-θf)+√(vm^2-2γ*θf*L^2+θf^2*L^2))/(vm+L*γ)) # time until impact, phase 1
+    # theta is angle ccw from surface normal (which may be at slope)
+    thetaf = -alpha + deltaangle # angle of stance leg just before impact, negative means cw
+    # angle wrt vertical is -alpha-gamma+deltaangle
+    #omegaminus = -√(2*g*(cos(0)-cos(thetaf))+L*vm^2)/√L  # pre-impact speed
+    omegaminus = -√(2*g/L*(cos(-gamma)-cos(thetaf-gamma))+(vm/L)^2)  # pre-impact speed
+    tf1 = mylog((L*(gamma-thetaf)+√(vm^2-2gamma*thetaf*L^2+thetaf^2*L^2))/(vm+L*gamma)) # time until impact, phase 1
     # Step-to-step transition: Push-off and collision
     Pwork = 1/2 * P^2
-    v0 = √(Ωminus^2 + P^2) # intermediate velocity after push-off
-    Ωplus = cos(2α)*Ωminus - P*sin(2α) # initial ang vel of next leg
-    Cwork = 1/2*(Ωplus^2 - v0^2) # negative collision work
+    v0 = √(omegaminus^2 + P^2) # intermediate velocity after push-off
+    omegaplus = cos(2alpha)*omegaminus - P*sin(2alpha) # initial ang vel of next leg
+    Cwork = 1/2*(omegaplus^2 - v0^2) # negative collision work
     C = √(-2Cwork)
     # Phase 2: From just after impact to next mid-stance
-    θnew = α + δangle # new stance leg's initial angle
-    #    tf2 = mylog((γ + √(2γ*θnew-θnew^2+Ωplus^2))/(γ-θnew-Ωplus))
-    gto = γ - θnew - Ωplus # needs to be positive for pendulum to reach next mid-stance
+    thetanew = alpha + deltaangle # new stance leg's initial angle
+    #    tf2 = mylog((gamma + √(2gamma*thetanew-thetanew^2+omegaplus^2))/(gamma-thetanew-omegaplus))
+    gto = gamma - thetanew - omegaplus # needs to be positive for pendulum to reach next mid-stance
     if safety && gto <= 0
         tf2 = 1e3 - gto # more negative gto is worse, increasing a tf2 time
     else # safety off OR gto positive
         # time to mid-stance, phase 2
-        inroot = (2γ*θnew-θnew^2+Ωplus^2)
+        inroot = (2gamma*thetanew-thetanew^2+omegaplus^2)
         if inroot >= 0
-#            tf2 = mylog((γ + √(2γ*θnew-θnew^2+Ωplus^2))/(gto)) # time to mid-stance, phase 2
-            tf2 = mylog((γ + √inroot)/(gto)) # time to mid-stance, phase 2
+#            tf2 = mylog((gamma + √(2gamma*thetanew-thetanew^2+omegaplus^2))/(gto)) # time to mid-stance, phase 2
+            tf2 = mylog((gamma + √inroot)/(gto)) # time to mid-stance, phase 2
         else # inroot negative,
             tf2 = 1e4 - inroot # more negative inroot extends time
         end
@@ -215,7 +215,7 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
     end
     # divide time for second phase by perturbation size (since it correlates to speed change)
     tf2 = tf2/pert
-    twicenextenergy = (2g*L*cos(θnew-γ)+L^2*Ωplus^2-2g*L*cos(-γ)) # to find next vm
+    twicenextenergy = (2g*L*cos(thetanew-gamma)+L^2*omegaplus^2-2g*L*cos(-gamma)) # to find next vm
     if twicenextenergy >= 0.
         vmnew = √twicenextenergy
     elseif safety # not enough energy
@@ -228,13 +228,13 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, δangle = 0.,
     vmnew = pert*vmnew
 
     # Step metrics
-    steplength = 2L*sin(α) # rimless wheel step length
+    steplength = 2L*sin(alpha) # rimless wheel step length
     tf = tf1 + tf2 # total time mid-stance to mid-stance
     speed = steplength / tf # average speed mid-stance to mid-stance
-    return (vm=vmnew, θnew=θnew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
+    return (vm=vmnew, thetanew=thetanew, tf=tf, P=P, C=C, Pwork=Pwork,Cwork=Cwork,
         speed=speed, steplength=steplength, stepfrequency=speed/steplength,tf1=tf1, tf2=tf2,
-        Ωminus=Ωminus,Ωplus=Ωplus,
-        vm0=vm,δ=δangle)
+        omegaminus=omegaminus,omegaplus=omegaplus,
+        vm0=vm,delta=deltaangle)
 end
 export simulatestep
 
@@ -242,20 +242,20 @@ export simulatestep
     simulatestep(walk [,parameters, safety])
 
 Simulate one step with a `walk` struct, from mid-stance to mid-stance,
-and return the continuous-time time t plus states θ and Ω. Continuous-
+and return the continuous-time time t plus states theta and omega. Continuous-
 time states are useful for plotting. Here they include a doubled time
 point for the step-to-step transition, for the states immediately before and
 after.
 
 Parameter values can be supplied to override the existing field values. 
-Notably, includes vm, P, δangle.
-Output is arrays (t, θ, Ω).
+Notably, includes vm, P, deltaangle.
+Output is arrays (t, theta, omega).
 See `onestep` to get just the discrete mid-stance states.
 """
 function simulatestep(w::WalkRW2l; options...)
     # find end conditions of a step, destructure into local variables
-    (; vm0,θnew,tf,tf1,tf2,Ωplus) = onestep(w; options...)
-    (; g, L, γ) = w;
+    (; vm0,thetanew,tf,tf1,tf2,omegaplus) = onestep(w; options...)
+    (; g, L, gamma) = w;
     n = 100
     n1 = Int(floor((n+1)/2)) # allocate time steps before & after s2s transition
     n2 = n - n1            
@@ -264,20 +264,20 @@ function simulatestep(w::WalkRW2l; options...)
     # where we treat each phase as starting at t=0. For plotting we will assemble
     # a single time vector for both phases
     t = [t1; t2 .+ tf1]
-    ωₙ = g / L  
+    omegaₙ = g / L  
     #show(typeof(t1))
     #show(typeof(tf1))
-    #show( exp.(ωₙ .*t1) )
-    etw = exp.(ωₙ*t1); emtw = 1 ./ etw # char roots of linearized inverted pendulum are ±ωₙ
+    #show( exp.(omegaₙ .*t1) )
+    etw = exp.(omegaₙ*t1); emtw = 1 ./ etw # char roots of linearized inverted pendulum are ±omegaₙ
     # Leg angle vs. time, first part of stance
-    θ1 = @. -(emtw*(etw-1)*((etw+1)*vm0)+(etw-1)*L*γ*ωₙ)/(2*L*ωₙ) 
+    theta1 = @. -(emtw*(etw-1)*((etw+1)*vm0)+(etw-1)*L*gamma*omegaₙ)/(2*L*omegaₙ) 
     # second part of stance
-    etw = exp.(ωₙ*t2); emtw = 1 ./ etw # char roots of linearized inverted pendulum are ±ωₙ
-    θ2 = @. emtw *((etw*etw-1)*Ωplus + (-(etw-1)^2*γ + (etw*etw+1)*θnew)*ωₙ)/(2*ωₙ) 
-    Ω1 = @. -(emtw*(etw*etw+1)*vm0+(etw*etw-1)*L*γ*ωₙ)/(2*L)
-    Ω2 = @. 0.5*emtw*((etw*etw+1)*Ωplus - (etw*etw-1)*(γ-θnew)*ωₙ)
+    etw = exp.(omegaₙ*t2); emtw = 1 ./ etw # char roots of linearized inverted pendulum are ±omegaₙ
+    theta2 = @. emtw *((etw*etw-1)*omegaplus + (-(etw-1)^2*gamma + (etw*etw+1)*thetanew)*omegaₙ)/(2*omegaₙ) 
+    omega1 = @. -(emtw*(etw*etw+1)*vm0+(etw*etw-1)*L*gamma*omegaₙ)/(2*L)
+    omega2 = @. 0.5*emtw*((etw*etw+1)*omegaplus - (etw*etw-1)*(gamma-thetanew)*omegaₙ)
 
-    return (t, [θ1; θ2], [Ω1; Ω2])
+    return (t, [theta1; theta2], [omega1; omega2])
 end
 
 """
@@ -311,7 +311,7 @@ end
 # Non-keyword form, with ordered arguments: w, target, varying
 function findgait(w::W, target::Tuple{Vararg{Pair}}, varying::Tuple) where W <: Walk
     # target = (:speed=>0.4, ) or even nothing--there's a function related to this
-    # varying = (:P, :α) a tuple of symbols representing model parameters
+    # varying = (:P, :alpha) a tuple of symbols representing model parameters
     varying = (varying..., w.limitcycle.parms...)   # we always add vm as a limit cycle variable
     target = (target..., # and a target, where 0 is dummy
         map(Pair,w.limitcycle.parms,zeros(length(w.limitcycle.parms)))...)
@@ -364,23 +364,23 @@ steps as in push-off array `Ps`. Returns a `MultiStepResults` struct containing 
 
 Optional named keyword version can be called with any order of arguments after
 `walk`:
-    multistep(walk; Ps = [0.15, 0.15], δangles = [-0.1, 0.1], vm0=walk.vm, boundaryvels=(),
+    multistep(walk; Ps = [0.15, 0.15], deltaangles = [-0.1, 0.1], vm0=walk.vm, boundaryvels=(),
         extracost = 0, walkparms...)
 
-where slope angles `δangles` (default level ground), `vm0` initial mid-stance velocity,
+where slope angles `deltaangles` (default level ground), `vm0` initial mid-stance velocity,
 `boundaryvels` boundary velocities, `extracost` added onto push-off work, and `walkparms`
-can be used to apply model parameters such as `α`, `γ`, `M`, etc.
+can be used to apply model parameters such as `alpha`, `gamma`, `M`, etc.
 """
-function multistep(w::W; Ps=w.P*ones(5), δangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0,
+function multistep(w::W; Ps=w.P*ones(5), deltaangles=zeros(length(Ps)), vm0 = w.vm, extracost = 0,
     boundaryvels=(), perts=ones(length(Ps)), walkparms...) where W <: Walk
-    return multistep(W(w; walkparms...), Ps, δangles, boundaryvels=boundaryvels, extracost = extracost, perts=perts)
+    return multistep(W(w; walkparms...), Ps, deltaangles, boundaryvels=boundaryvels, extracost = extracost, perts=perts)
 end
 
-function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.vm,
+function multistep(w::W, Ps::AbstractArray, deltaangles=zeros(length(Ps)); vm0 = w.vm,
     boundaryvels=(), extracost = 0, perts=ones(length(Ps)), J="u") where W <: Walk
     steps = StructArray{StepResults}(undef, length(Ps))
     for i in 1:length(Ps)
-        steps[i] = StepResults(onestep(w, P=Ps[i], δangle=δangles[i], pert=perts[i])...)
+        steps[i] = StepResults(onestep(w, P=Ps[i], deltaangle=deltaangles[i], pert=perts[i])...)
         w = W(w, vm=steps[i].vm)
     end
     tfstar = onestep(w).tf
@@ -389,7 +389,7 @@ function multistep(w::W, Ps::AbstractArray, δangles=zeros(length(Ps)); vm0 = w.
     # 1/2 (v[1]^2-boundaryvels[1]^2)
     totaltime = sum(getfield.(steps,:tf))
     finalvm = w.vm
-    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, J)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts, J)
     # boundaryvels is just passed forward to plots
 end
 
@@ -417,10 +417,10 @@ multistepplot
     msr = h.args[1]
     v = [msr.vm0; msr.steps.vm] # all velocities
     P = msr.steps.P
-    δ = msr.δangles
+    delta = msr.deltaangles
     boundaryvels = collect(msr.boundaryvels) # convert to array
 
-    #noslope = all(δ .== 0.)
+    #noslope = all(delta .== 0.)
     doslope = true
 
     n = length(msr.steps) # how many steps
@@ -435,7 +435,7 @@ multistepplot
     else
         layout := @layout [vplot
                            Pplot
-                           δplot]
+                           deltaplot]
     end
 
     if !boundarywork # don't want to show gait initiation
@@ -475,7 +475,7 @@ multistepplot
             subplot := 3
             yguide := "Terrain height"
             xguide := "Step number"
-            0:n, cumsum([0.; δ])
+            0:n, cumsum([0.; delta])
         end
     end
 end
@@ -487,7 +487,7 @@ export optwalk, optwalkslope, optwalk_TC
     optwalk(w::Walk, numsteps=5)
 
 Optimizes push-offs to walk `numsteps` steps. Returns a `MultiStepResults`
-struct. Allows slopes to be specified as keyword `δs` array of the slope of each successive
+struct. Allows slopes to be specified as keyword `deltas` array of the slope of each successive
 step.
 
 Other keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
@@ -500,7 +500,7 @@ See also `optwalktime`.
 """
 function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps), perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    deltas = zeros(numsteps), perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt)
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -524,13 +524,13 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     # Constraints
     # produce separate functions for speeds and step times
     register(optsteps, :onestepv, 4, # velocity after a step
-        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).vm, autodiff=true) # output vm
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 4, # time after a step
-        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).tf, autodiff=true)
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).tf, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],deltas[i],perts[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
@@ -547,13 +547,13 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
         println(termination_status(optsteps))
     end
 
-    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts,
+    return multistep(W(w,vm=value(v[1])), value.(P), deltas, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts,
         extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps), perts = ones(numsteps), J="u", weight=0, min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    deltas = zeros(numsteps), perts = ones(numsteps), J="u", weight=0, min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     # Set lower and upper bounds for P to simulate impairment
     lb = min_P*w.P
@@ -585,18 +585,18 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     # Constraints
     # produce separate functions for speeds and step times
     register(optsteps, :onestepv, 4, # velocity after a step
-        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).vm, autodiff=true) # output vm
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 4, # time after a step
-        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).tf, autodiff=true)
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).tf, autodiff=true)
     register(optsteps, :onestepu, 4, # time after a step
-        (v,P,δ,pert)->onestep(w,P=P,vm=v, δangle=δ, pert=pert).Pwork, autodiff=true)
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).Pwork, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δs[i],perts[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
     @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
     @NLexpression(optsteps, nominalu, onestepu(w.vm,w.P,0,1)) # nominal work
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i],perts[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],deltas[i],perts[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
@@ -604,15 +604,15 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         if J == "dt"
-            @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],δs[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # cost = change in step time
+            @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],deltas[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # cost = change in step time
         elseif J == "u"
             @NLobjective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps)))  # energy cost = push-off work
         elseif J == "dv"
-            @NLobjective(optsteps, Min, 1/2*sum((onestepv(v[i],P[i],δs[i],perts[i])-nominalvel)^2 for i=1:numsteps))  # cost = change in velocity
+            @NLobjective(optsteps, Min, 1/2*sum((onestepv(v[i],P[i],deltas[i],perts[i])-nominalvel)^2 for i=1:numsteps))  # cost = change in velocity
         elseif J == "du"
-            @NLobjective(optsteps, Min, 1/2*sum((onestepu(v[i],P[i],δs[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
+            @NLobjective(optsteps, Min, 1/2*sum((onestepu(v[i],P[i],deltas[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
         elseif J == "sum"
-            @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestepu(v[i],P[i],δs[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
+            @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestepu(v[i],P[i],deltas[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
         end
     end
     optimize!(optsteps)
@@ -623,7 +623,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         println(termination_status(optsteps))
     end
 
-    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts,
+    return multistep(W(w,vm=value(v[1])), value.(P), deltas, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts,
         extracost = boundarywork[1] ? 1/2*(value(v[1])^2 - boundaryvels[1]^2)+0/2*(value(v[end])^2-boundaryvels[2]^2) : 0) #, optimal_solution
 end
 
@@ -645,8 +645,8 @@ function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = not
     totaltime=numsteps*onestep(w).tf, perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>1, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
-    @variable(optsteps, δ[1:numsteps], start=0.)         # delta slope
-    @constraint(optsteps, sum(δ[i] for i =1:numsteps) == 0.)  # zero height gain
+    @variable(optsteps, delta[1:numsteps], start=0.)         # delta slope
+    @constraint(optsteps, sum(delta[i] for i =1:numsteps) == 0.)  # zero height gain
     @variable(optsteps, v[1:numsteps+1]>=0, start=w.vm) # mid-stance speeds
 
     if boundaryvels === nothing
@@ -661,22 +661,22 @@ function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = not
     # Constraints
     # produce separate functions for speeds and step times
     register(optsteps, :onestepv, 3, # velocity after a step
-        (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ).vm, autodiff=true) # output vm
+        (v,P,delta)->onestep(w,P=P,vm=v,deltaangle=delta).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 3, # time after a step
-        (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ).tf, autodiff=true)
+        (v,P,delta)->onestep(w,P=P,vm=v,deltaangle=delta).tf, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δ[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],delta[i]) for i = 1:numsteps))
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δ[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],delta[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
     if symmetric
         for j in 1:numsteps÷2
-            @constraint(optsteps, δ[numsteps-j+1] == -δ[j])
+            @constraint(optsteps, delta[numsteps-j+1] == -delta[j])
         end
         if isodd(numsteps)
-            @constraint(optsteps, δ[numsteps÷2+1] == 0)
+            @constraint(optsteps, delta[numsteps÷2+1] == 0)
         end
     end
 
@@ -688,12 +688,12 @@ function optwalkslope(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = not
 
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
-        optimal_solution = (vms=value.(v), Ps=value.(P), δs=value.(δ))
+        optimal_solution = (vms=value.(v), Ps=value.(P), deltas=value.(delta))
     else
         error("The model was not solved correctly.")
         println(termination_status(optsteps))
     end
-    return multistep(W(w,vm=value(v[1])), value.(P), value.(δ), vm0=value(v[1]),
+    return multistep(W(w,vm=value(v[1])), value.(P), value.(delta), vm0=value(v[1]),
         boundaryvels = boundaryvels, perts = perts,
         extracost = boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0)
 end
@@ -742,7 +742,7 @@ function plotvees!(p::Union{Plots.Plot,Plots.Subplot}, msr::MultiStepResults; tc
         error("Option speedtype unrecognized: ", 2)
     end
 
-    firstbumpstep = stepoffirstbump(msr.steps.δ, setfirstbumpstep)
+    firstbumpstep = stepoffirstbump(msr.steps.delta, setfirstbumpstep)
     if firstbumpstep > 0 # redefine t=0 to correspond to heelstrike on this bump
         times .= times .- (sum(msr.steps.tf[1:firstbumpstep-1]) + msr.steps.tf1[firstbumpstep]) # tf1 is heelstrike
     end
@@ -777,24 +777,24 @@ function plotterrain!(p::Union{Plots.Plot,Plots.Subplot}, heights; setfirstbumps
 end
 
 """
-    stepoffirstbump(δs, setfirstbumpstep = false)
+    stepoffirstbump(deltas, setfirstbumpstep = false)
 
-Determines which step the first bump occurs on for terrain `δs`. Returns an
-integer referring to which step/index of `δs` should be treated as time 0.
-`setfirstbumpstep` = `true``   determines first step that has non-zero `δ`
+Determines which step the first bump occurs on for terrain `deltas`. Returns an
+integer referring to which step/index of `deltas` should be treated as time 0.
+`setfirstbumpstep` = `true``   determines first step that has non-zero `delta`
                    = false     ignores terrain, returns step 0
                    = N         returns N as set by user
 Used for plotting speeds and terrains, to align t=0 to a common step.
 """
-function stepoffirstbump(δs, setfirstbumpstep::Bool = false)
-    if setfirstbumpstep && any(!iszero(δs))
-        firstbump = findfirst(!iszero, δs)
+function stepoffirstbump(deltas, setfirstbumpstep::Bool = false)
+    if setfirstbumpstep && any(!iszero(deltas))
+        firstbump = findfirst(!iszero, deltas)
     else
         firstbump = 0 # no shift in step number
     end
 end
 
-stepoffirstbump(δs, setfirstbumpstep::Real=0) = setfirstbumpstep
+stepoffirstbump(deltas, setfirstbumpstep::Real=0) = setfirstbumpstep
 
 using JuMP, Ipopt
 export optwalktime
@@ -803,7 +803,7 @@ export optwalktime
     optwalktime(w::WalkrW2l, numsteps=5)
 
 Optimizes push-offs to walk `numsteps` steps in minimum work and time. Returns a `MultiStepResults`
-struct. Optional keyword arguments: `δ` array of slopes for uneven terrain. `ctime` is the relative
+struct. Optional keyword arguments: `delta` array of slopes for uneven terrain. `ctime` is the relative
 cost of time in units of work/time.
 
 Other keywords: `boundaryvels = (vm,vm)`
@@ -817,7 +817,7 @@ time expected of the nominal `w` on level ground. `startv` initial guess at spee
 See also `optwalk`.
 """
 function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.), safety=true,
-    ctime = 0.05, tchange = 3., boundarywork = true, δs = zeros(nsteps), startv = w.vm, negworkcost = 0., 
+    ctime = 0.05, tchange = 3., boundarywork = true, deltas = zeros(nsteps), startv = w.vm, negworkcost = 0., 
         perts = ones(nsteps), walkparms...) where W <: Walk
     #println("walkparms = ", walkparms)
     w = W(w; walkparms...)
@@ -829,23 +829,23 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
     else # starting guess for v is an array
         @variable(optsteps, v[i=1:nsteps+1]>=0, start=startv[i])
     end
-    register(optsteps, :onestepv, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).vm, autodiff=true) # input P, output vm
-    register(optsteps, :onestept, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).tf, autodiff=true)
-    register(optsteps, :onestepc, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).C, autodiff=true)
-    register(optsteps, :onestepcps, 3, (v,P,δ)->onestep(w,P=P,vm=v,δangle=δ,safety=safety).costperstep, autodiff=true)
-    @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i],δs[i]))
-    @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i],δs[i]) for i = 1:nsteps))
+    register(optsteps, :onestepv, 3, (v,P,delta)->onestep(w,P=P,vm=v,deltaangle=delta,safety=safety).vm, autodiff=true) # input P, output vm
+    register(optsteps, :onestept, 3, (v,P,delta)->onestep(w,P=P,vm=v,deltaangle=delta,safety=safety).tf, autodiff=true)
+    register(optsteps, :onestepc, 3, (v,P,delta)->onestep(w,P=P,vm=v,deltaangle=delta,safety=safety).C, autodiff=true)
+    register(optsteps, :onestepcps, 3, (v,P,delta)->onestep(w,P=P,vm=v,deltaangle=delta,safety=safety).costperstep, autodiff=true)
+    @NLexpression(optsteps, steptime[i=1:nsteps], onestept(v[i],P[i],deltas[i]))
+    @NLexpression(optsteps, totaltime, sum(onestept(v[i],P[i],deltas[i]) for i = 1:nsteps))
     for i = 1:nsteps # collocation points
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],deltas[i]))
     end
     if boundarywork
-        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],deltas[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
             ctime*totaltime)
  #        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + 0.22*(sum(v[i]^3.16 for i=1:nsteps) + 
- #           negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
+ #           negworkcost*sum(onestepc(v[i],P[i],deltas[i])^2 for i=1:nsteps) + v[1]^2 - boundaryvels[1]^2 + negworkcost*(-boundaryvels[2]^2+v[nsteps+1]^2)) +
  #           ctime*totaltime) # TODO problem here
     else
-        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],δs[i])^2 for i=1:nsteps)) +
+        @NLobjective(optsteps, Min, 1/2*(sum(P[i]^2 for i=1:nsteps) + negworkcost*sum(onestepc(v[i],P[i],deltas[i])^2 for i=1:nsteps)) +
             ctime*totaltime)
     end
     optimize!(optsteps)
@@ -856,7 +856,7 @@ function optwalktime(w::W, nsteps=5; boundaryvels::Union{Tuple,Nothing} = (0.,0.
         println(termination_status(optsteps))
     end
 
-    result = multistep(W(w,vm=value(v[1]),safety=safety), value.(P), δs, vm0=value(v[1]),
+    result = multistep(W(w,vm=value(v[1]),safety=safety), value.(P), deltas, vm0=value(v[1]),
         boundaryvels=boundaryvels, perts = perts, extracost = ctime*value(totaltime) +
         (boundarywork ? 1/2*(value(v[1])^2-boundaryvels[1]^2) : 0))
     return result
@@ -883,7 +883,7 @@ end
 # Optimize walking to match a velocity profile
 # function optwalkvel(w::Walk, vels; boundaryvels::Union{Tuple,Nothing} = nothing,
 #     boundarywork = true,
-#     δ = zeros(numsteps))
+#     delta = zeros(numsteps))
 #
 #     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
 #     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -900,13 +900,13 @@ end
 #     # Constraints
 #     # produce separate functions for speeds and step times
 #     register(optsteps, :onestepv, 3, # velocity after a step
-#         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).vm, autodiff=true) # output vm
+#         (v,P,delta)->onestep(w,P=P,vm=v, deltaangle=delta).vm, autodiff=true) # output vm
 #     register(optsteps, :onestept, 3, # time after a step
-#         (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
+#         (v,P,delta)->onestep(w,P=P,vm=v, deltaangle=delta).tf, autodiff=true)
 #     @NLexpression(optsteps, summedtime, # add up time of all steps
-#         sum(onestept(v[i],P[i],δ[i]) for i = 1:numsteps))
+#         sum(onestept(v[i],P[i],delta[i]) for i = 1:numsteps))
 #     for i = 1:numsteps  # step dynamics
-#         @NLconstraint(optsteps, vels[i]==onestepv(v[i],P[i],δ[i]))
+#         @NLconstraint(optsteps, vels[i]==onestepv(v[i],P[i],delta[i]))
 #     end
 #     @NLconstraint(optsteps, summedtime == totaltime) # total time
 #
@@ -922,14 +922,14 @@ end
 #         error("The model was not solved correctly.")
 #         println(termination_status(optsteps))
 #     end
-#     return multistep(Walk(w,vm=value(v[1])), value.(P), δ, value(v[1]), boundaryvels,
+#     return multistep(Walk(w,vm=value(v[1])), value.(P), delta, value(v[1]), boundaryvels,
 #         extracost = boundarywork ? 1/2*(value(v[1])^2 - boundaryvels[1]^2) : 0) #, optimal_solution
 # end
 
 # MPC: perform optimization across given horizon per step
 using JuMP, Ipopt
 export mpcstep
-function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
+function mpcstep(w::W, nsteps, nhorizon, deltaangles=zeros(nsteps); vm0 = w.vm,
                  boundaryvels=(), extracost = 0, perts = ones(nsteps), J="u", weight=0, min_P=zeros(nsteps), max_P=2*ones(nsteps)) where W <: Walk
     steps = StructArray{StepResults}(undef, nsteps)
     vm_current = vm0
@@ -963,7 +963,7 @@ function mpcstep(w::W, nsteps, nhorizon, δangles=zeros(nsteps); vm0 = w.vm,
     workcost = sum(steps[i].Pwork for i in 1:nsteps)
     tvarcost = 1/2*sum((steps[i].tf-tfstar)^2 for i in 1:nsteps)
     totaltime = sum(getfield.(steps,:tf))
-    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, δangles, boundaryvels, perts, J)
+    return MultiStepResults(steps, workcost, tvarcost, totaltime, vm0, deltaangles, boundaryvels, perts, J)
 end
 
 # I should also do something where we minimize the deviation in speed and
@@ -981,7 +981,7 @@ export optwalkvar
     optwalkvar(w::Walk, numsteps=5)
 
 Minimizes variance to walk `numsteps` steps. Returns a `MultiStepResults`
-struct. As in a "tight regulation" control. Allows slopes to be specified as keyword `δs` array of the slope of each successive
+struct. As in a "tight regulation" control. Allows slopes to be specified as keyword `deltas` array of the slope of each successive
 step.
 
 Other keyword arguments: `boundaryvels = (vm,vm)` can specify a tuple of initial and
@@ -992,7 +992,7 @@ the same time expected of the nominal `w` on level ground.
 """
 function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
-    δs = zeros(numsteps), perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    deltas = zeros(numsteps), perts = ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     optsteps = Model(optimizer_with_attributes(Ipopt.Optimizer, "print_level"=>0, "sb"=>"yes")) # sb=suppress banner Ipopt
     @variable(optsteps, P[1:numsteps]>=0, start=w.P) # JuMP variables P
@@ -1016,21 +1016,21 @@ function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     # Constraints
     # produce separate functions for speeds and step times
     register(optsteps, :onestepv, 3, # velocity after a step
-        (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).vm, autodiff=true) # output vm
+        (v,P,delta)->onestep(w,P=P,vm=v, deltaangle=delta).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 3, # time after a step
-        (v,P,δ)->onestep(w,P=P,vm=v, δangle=δ).tf, autodiff=true)
+        (v,P,delta)->onestep(w,P=P,vm=v, deltaangle=delta).tf, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
-        sum(onestept(v[i],P[i],δs[i]) for i = 1:numsteps))
+        sum(onestept(v[i],P[i],deltas[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0)) # nominaltime
     @NLexpression(optsteps, variance,
-        sum((onestepv(v[i],P[i],δs[i])-w.vm)^2 for i=1:numsteps))
+        sum((onestepv(v[i],P[i],deltas[i])-w.vm)^2 for i=1:numsteps))
     for i = 1:numsteps  # step dynamics
-        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],δs[i]))
+        @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],deltas[i]))
     end
     @NLconstraint(optsteps, summedtime == totaltime) # total time
 
     #@objective(optsteps, Min, 1/2*sum((v[i]-w.vm)^2 for i=1:numsteps)) # minimum variance of mid-stance velocity
-    @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],δs[i])-nominaltime)^2 for i=1:numsteps))
+    @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],deltas[i])-nominaltime)^2 for i=1:numsteps))
 
     optimize!(optsteps)
     if termination_status(optsteps) == MOI.LOCALLY_SOLVED || termination_status(optsteps) == MOI.OPTIMAL
@@ -1040,7 +1040,7 @@ function optwalkvar(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         println(termination_status(optsteps))
     end
 
-    return multistep(W(w,vm=value(v[1])), value.(P), δs, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts) #, optimal_solution
+    return multistep(W(w,vm=value(v[1])), value.(P), deltas, vm0=value(v[1]), boundaryvels=boundaryvels, perts=perts) #, optimal_solution
 end
 
 """

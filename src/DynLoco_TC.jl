@@ -210,8 +210,7 @@ function onestep(w::WalkRW2l; vm=w.vm, P=w.P, deltaangle = 0.,
         end
 
     end
-    # divide time for second phase by perturbation size (since it correlates to speed change)
-    tf2 = tf2/pert
+
     twicenextenergy = (2g*L*cos(thetanew-gamma)+L^2*omegaplus^2-2g*L*cos(-gamma)) # to find next vm
     if twicenextenergy >= 0.
         vmnew = √twicenextenergy

@@ -6,6 +6,7 @@ using Parameters #, DifferentialEquations
 using JuMP, Ipopt, Plots, Setfield
 using StructArrays
 using Dierckx # spline package
+using Statistics
 
 export Walk, AbstractWalkRW2, WalkRW2l, Parms, onestep
 export findgait

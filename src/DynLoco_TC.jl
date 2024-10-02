@@ -548,7 +548,7 @@ function optwalk(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
 end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
-    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf,
+    boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf, averagespeed=onestep(w).speed,
     deltas = zeros(numsteps), perts = ones(numsteps), J="u", weight=0, min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
 
     # Set lower and upper bounds for P to simulate impairment
@@ -586,16 +586,21 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).tf, autodiff=true)
     register(optsteps, :onestepu, 4, # time after a step
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).Pwork, autodiff=true)
+    register(optsteps, :onesteps, 4, # average speed during step
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).speed, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
         sum(onestept(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
+    @NLexpression(optsteps, speed, # get mean speed
+        mean(onesteps(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
     @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
     @NLexpression(optsteps, nominalu, onestepu(w.vm,w.P,0,1)) # nominal work
     for i = 1:numsteps  # step dynamics
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],deltas[i],perts[i]))
     end
-    @NLconstraint(optsteps, summedtime == totaltime) # total time
-
+    # @NLconstraint(optsteps, summedtime == totaltime) # total time
+    @NLconstraint(optsteps, speed == averagespeed) # constrain average speed like treadmill
+    
     if boundarywork[1]
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else

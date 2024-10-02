@@ -587,12 +587,13 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).tf, autodiff=true)
     register(optsteps, :onestepu, 4, # time after a step
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).Pwork, autodiff=true)
-    register(optsteps, :onesteps, 4, # average speed during step
-        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).speed, autodiff=true)
+    register(optsteps, :onestepd, 4, # step length
+        (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).steplength, autodiff=true)
     @NLexpression(optsteps, summedtime, # add up time of all steps
         sum(onestept(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
-    @NLexpression(optsteps, speed, # get mean speed
-        Statistics.mean(onesteps(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
+    @NLexpression(optsteps, summeddistance, # add up step lengths
+        sum(onestepd(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
+    @NLexpression(optsteps, speed, summeddistance/summedtime)
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
     @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
     @NLexpression(optsteps, nominalu, onestepu(w.vm,w.P,0,1)) # nominal work

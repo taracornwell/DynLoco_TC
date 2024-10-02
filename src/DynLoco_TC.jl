@@ -592,7 +592,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
     @NLexpression(optsteps, summedtime, # add up time of all steps
         sum(onestept(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, speed, # get mean speed
-        mean(onesteps(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
+        Statistics.mean(onesteps(v[i],P[i],deltas[i],perts[i]) for i = 1:numsteps))
     @NLexpression(optsteps, nominaltime, onestept(w.vm,w.P,0,1)) # nominaltime
     @NLexpression(optsteps, nominalvel, onestepv(w.vm,w.P,0,1)) # nominal speed
     @NLexpression(optsteps, nominalu, onestepu(w.vm,w.P,0,1)) # nominal work

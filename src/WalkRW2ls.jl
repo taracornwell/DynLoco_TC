@@ -96,8 +96,8 @@ end
     L = 1.  # leg length
     M = 1.  # body mass
     g = 1.  # gravitational acceleration
-    beta = 0.42 # s = c*v^beta
-    # beta = 0.54 # value updated from Collins and Kuo 2013
+    # beta = 0.42 # s = c*v^beta
+    beta = 0.54 # value updated from Collins and Kuo 2013
     c = 1. # how step length increases with speed
     # c = 1.22 # value updated from Collins and Kuo 2013
     vmstar = 0.

@@ -585,7 +585,7 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).vm, autodiff=true) # output vm
     register(optsteps, :onestept, 4, # time after a step
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).tf, autodiff=true)
-    register(optsteps, :onestepu, 4, # time after a step
+    register(optsteps, :onestepu, 4, # work during a step
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).Pwork, autodiff=true)
     register(optsteps, :onestepd, 4, # step length
         (v,P,delta,pert)->onestep(w,P=P,vm=v, deltaangle=delta, pert=pert).steplength, autodiff=true)
@@ -607,15 +607,15 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
     else
         if J == "dt"
-            @NLobjective(optsteps, Min, 1/2*sum((onestept(v[i],P[i],deltas[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # cost = change in step time
+            @NLobjective(optsteps, Min, sum((onestept(v[i],P[i],deltas[i],perts[i])-nominaltime)^2 for i=1:numsteps)) # cost = change in step time
         elseif J == "u"
             @NLobjective(optsteps, Min, 1/2*sum((P[i]^2 for i=1:numsteps)))  # energy cost = push-off work
         elseif J == "dv"
-            @NLobjective(optsteps, Min, 1/2*sum((onestepv(v[i],P[i],deltas[i],perts[i])-nominalvel)^2 for i=1:numsteps))  # cost = change in velocity
+            @NLobjective(optsteps, Min, sum((onestepv(v[i],P[i],deltas[i],perts[i])-nominalvel)^2 for i=1:numsteps))  # cost = change in velocity
         elseif J == "du"
-            @NLobjective(optsteps, Min, 1/2*sum((onestepu(v[i],P[i],deltas[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
+            @NLobjective(optsteps, Min, sum((onestepu(v[i],P[i],deltas[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
         elseif J == "sum"
-            @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*1/2*sum((onestepu(v[i],P[i],deltas[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
+            @NLobjective(optsteps, Min, (1-weight)*1/2*sum((P[i]^2 for i=1:numsteps)) + weight*sum((onestepu(v[i],P[i],deltas[i],perts[i])-nominalu)^2 for i=1:numsteps))  # cost = change in pushoff work
         end
     end
     optimize!(optsteps)

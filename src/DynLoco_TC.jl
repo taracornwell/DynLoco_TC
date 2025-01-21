@@ -550,7 +550,7 @@ end
 
 function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothing,
     boundarywork::Union{Tuple{Bool,Bool},Bool} = (true,true), totaltime=numsteps*onestep(w).tf, averagespeed=onestep(w).speed,
-    deltas = zeros(numsteps), perts = ones(numsteps), J="u", weight=0, min_P=zeros(numsteps), max_P=2*ones(numsteps)) where W <: Walk # default to taking the time of regular steady walking
+    deltas = zeros(numsteps), perts = ones(numsteps), J="u", weight=0, min_P=zeros(numsteps), max_P=2*ones(numsteps), avg_speed=1) where W <: Walk # default to taking the time of regular steady walking
 
     # Set lower and upper bounds for P to simulate impairment
     lb = min_P*w.P
@@ -601,7 +601,9 @@ function optwalk_TC(w::W, numsteps=5; boundaryvels::Union{Tuple,Nothing} = nothi
         @NLconstraint(optsteps, v[i+1]==onestepv(v[i],P[i],deltas[i],perts[i]))
     end
     # @NLconstraint(optsteps, summedtime == totaltime) # total time
-    @NLconstraint(optsteps, speed == averagespeed) # constrain average speed like treadmill
+    if avg_speed == 1 # constrain mean speed
+        @NLconstraint(optsteps, speed == averagespeed) # constrain average speed like treadmill
+    end
     
     if boundarywork[1]
         @objective(optsteps, Min, 1/2*(sum((P[i]^2 for i=1:numsteps))+v[1]^2-boundaryvels[1]^2)+0*(v[end]^2-boundaryvels[2]^2)) # minimum pos work
